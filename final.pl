@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 
 use strict;
+use warnings;
 
 ##
 select((select(STDOUT), $|=1)[0]);
@@ -69,18 +70,24 @@ sub parse_input {
                 $last_actor = [$data[0], {}, -1, undef];
                 $actors->{$data[0]} = $last_actor;
             }
-            my $movie;
-            if(exists $movies->{$data[1]}) {
-                $movie = $movies->{$data[1]};
-                $movie->[1]->{$last_actor->[0]} = $last_actor;
+            if($data[1] =~ /(\".*\"|(.*\((VG|TV|V)\))).*/) {
+                #print("Rejecting $data[1]\n");
             }else {
-                # Create the new movie
-                # [ $title, %actors, $distance, $actor_ref ]
-                $movie = [$data[1], {$data[0]=>$last_actor}, -1, undef ];
-                $movies->{$data[1]} = $movie;
+                my $movie_title = $data[1] =~ /.*\(\d+\)/igs;
+                
+                my $movie;
+                if(exists $movies->{$data[1]}) {
+                    $movie = $movies->{$data[1]};
+                    $movie->[1]->{$last_actor->[0]} = $last_actor;
+                }else {
+                    # Create the new movie
+                    # [ $title, %actors, $distance, $actor_ref ]
+                    $movie = [$data[1], {$data[0]=>$last_actor}, -1, undef ];
+                    $movies->{$data[1]} = $movie;
+                }
+                
+                $last_actor->[1]->{$data[1]} = $movie;
             }
-            
-            $last_actor->[1]->{$data[1]=>$movie};
         }
         spinner_update();
     }
@@ -97,16 +104,18 @@ sub update_refs {
     
     print("Updating Graph... ");
     spinner_reset();
+    my $num = 0;
+    my $i = 0;
     # Process our stack, ending when we have no more to consider
     do {
         $stack = $next;
         $next = [];
-        while(scalar $stack) {
+        while(scalar @{$stack} != 0) {
             # Pop from stack
             my $current = shift $stack;
             $current->[2] = $dist;
             my @titles = (keys %{${$current}[1]});
-            for my $title ($titles) {
+            for my $title (@titles) {
                 # Grab the current movie
                 my $cmovie = $movies->{$title};
                 
@@ -121,7 +130,7 @@ sub update_refs {
                     # next stack if they haven't already been visited
                     for my $actor (values $cmovie->[1]) {
                         if($actor->[2] == -1) {
-                            push($next, $actor);
+                            push(@$next, $actor);
                             # Make sure to build the trail backwards
                             # The actor needs to know which movie put him
                             # on the stack. The specific movie doesn't
@@ -172,3 +181,33 @@ my $bacon_movies = $bacon->[1];
 
 # Do the flood fill
 update_refs($bacon, 0, $actors, $movies);
+
+print("Actor? ");
+while(<>) {
+    # Convert to "last, first", with title case
+    chomp;
+    my $name = $_;
+    if(!(exists $actors->{$name})) {
+        # Do keyword matching; eg. John -> Johnson, Johnny boy, etc.
+        print("No such actor\n");
+    }
+    my $actor = $actors->{$name};
+    
+    my $movie;
+    while($actor->[1] > 0) {
+        print("$name\n");
+        $movie = $actor->[3];
+        print("$movie\n");
+        $name = $movies->{$movie}->[3];
+        $actor = $actors->{$name};
+    }
+    
+    if($name != "Bacon, Kevin") {
+        print("$name\n");
+        $movie = $actor->[3];
+        print("$movie\n");
+        print("Bacon, Kevin");
+    }
+    
+    print("Actor? ");
+}
